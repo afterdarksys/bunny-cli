@@ -4,6 +4,7 @@ A complete command-line interface for [bunny.net](https://bunny.net) - manage CD
 
 [![PyPI version](https://badge.fury.io/py/bunny-cli.svg)](https://pypi.org/project/bunny-cli/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub](https://img.shields.io/github/stars/straticus1/bunny-cli?style=social)](https://github.com/straticus1/bunny-cli)
 
 ## Features
 
@@ -199,7 +200,7 @@ The CLI stores configuration in `~/.config/bunny/config.json`:
 
 ```bash
 # Clone the repo
-git clone https://github.com/AfterdarkSystems/bunny-cli.git
+git clone https://github.com/straticus1/bunny-cli.git
 cd bunny-cli
 
 # Install in development mode

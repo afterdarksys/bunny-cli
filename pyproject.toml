@@ -51,10 +51,10 @@ dev = [
 bunny = "bunny_cli.main:cli"
 
 [project.urls]
-Homepage = "https://github.com/AfterdarkSystems/bunny-cli"
-Documentation = "https://github.com/AfterdarkSystems/bunny-cli#readme"
-Repository = "https://github.com/AfterdarkSystems/bunny-cli"
-Issues = "https://github.com/AfterdarkSystems/bunny-cli/issues"
+Homepage = "https://github.com/straticus1/bunny-cli"
+Documentation = "https://github.com/straticus1/bunny-cli#readme"
+Repository = "https://github.com/straticus1/bunny-cli"
+Issues = "https://github.com/straticus1/bunny-cli/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bunny_cli"]
