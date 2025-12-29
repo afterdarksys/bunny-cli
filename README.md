@@ -13,6 +13,7 @@ A complete command-line interface for [bunny.net](https://bunny.net) - manage CD
 - **Storage Zones** - Manage edge storage zones
 - **Cache Purging** - Purge URLs or entire zones
 - **Statistics** - View bandwidth, requests, and geographic data
+- **Cloudflare Migration** - Migrate DNS and CDN from Cloudflare to Bunny
 - **Beautiful Output** - Rich terminal formatting with tables and colors
 
 ## Installation
@@ -195,6 +196,35 @@ The CLI stores configuration in `~/.config/bunny/config.json`:
 |----------|-------------|
 | `BUNNY_API_KEY` | Your bunny.net API key |
 | `BUNNY_API_ACCESS_KEY` | Alternative API key variable (for compatibility) |
+| `CF_API_TOKEN` | Cloudflare API token (for migration commands) |
+
+## Cloudflare Migration
+
+Migrate your DNS and CDN from Cloudflare to Bunny.net:
+
+```bash
+# Set your Cloudflare API token
+export CF_API_TOKEN=your-cloudflare-token
+
+# List your Cloudflare zones
+bunny cf zones
+
+# Preview DNS migration (dry run)
+bunny cf dns <cf-zone-id> <bunny-zone-id> --play
+
+# Execute DNS migration
+bunny cf dns <cf-zone-id> <bunny-zone-id> --exec
+
+# Create a pull zone to replace Cloudflare CDN proxy
+bunny cf pullzone <cf-zone-id> my-cdn --play
+bunny cf pullzone <cf-zone-id> my-cdn --origin https://origin.example.com --exec
+```
+
+Options:
+- `--play` - Dry run, show what would be migrated
+- `--exec` - Actually execute the migration
+- `--skip-proxied` - Skip records that are proxied through Cloudflare
+- `--skip-ns` - Skip NS records (default: true)
 
 ## Development
 

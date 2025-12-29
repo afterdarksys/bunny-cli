@@ -8,6 +8,7 @@ from rich.console import Console
 
 from bunny_cli import __version__
 from bunny_cli.client import BunnyAPIError
+from bunny_cli.commands.cf import cf
 from bunny_cli.commands.config import config
 from bunny_cli.commands.dns import dns
 from bunny_cli.commands.pullzone import pullzone
@@ -59,6 +60,7 @@ def cli(ctx: click.Context, api_key: Optional[str]) -> None:
 
 
 # Register command groups
+cli.add_command(cf)
 cli.add_command(config)
 cli.add_command(pullzone)
 cli.add_command(dns)
