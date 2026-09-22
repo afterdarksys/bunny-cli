@@ -4,7 +4,7 @@ A complete command-line interface for [bunny.net](https://bunny.net) - manage CD
 
 [![PyPI version](https://badge.fury.io/py/bunny-cli.svg)](https://pypi.org/project/bunny-cli/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GitHub](https://img.shields.io/github/stars/straticus1/bunny-cli?style=social)](https://github.com/straticus1/bunny-cli)
+[![GitHub](https://img.shields.io/github/stars/afterdarksys/bunny-cli?style=social)](https://github.com/afterdarksys/bunny-cli)
 
 ## Features
 
@@ -18,23 +18,22 @@ A complete command-line interface for [bunny.net](https://bunny.net) - manage CD
 
 ## Installation
 
-```bash
-pip install bunny-cli
-```
-
-Or with [pipx](https://pypa.github.io/pipx/) (recommended for CLI tools):
+Python 3.9 or newer. See [INSTALL.md](INSTALL.md) for upgrades, a from-source install, and uninstall.
 
 ```bash
 pipx install bunny-cli
 ```
 
+`pip install bunny-cli` also works.
+
 ## Quick Start
 
 1. Get your API key from [bunny.net Account Settings](https://panel.bunny.net/account)
 
-2. Configure the CLI:
+2. Configure the CLI. Prompting keeps the key out of shell history:
 ```bash
-bunny config set-key YOUR_API_KEY
+bunny config set-key
+bunny config test
 ```
 
 3. Start using it:
@@ -49,17 +48,25 @@ bunny storage list
 ### Configuration
 
 ```bash
-# Set your API key
-bunny config set-key YOUR_API_KEY
+# Save an API key (prompted, hidden)
+bunny config set-key
 
-# Show current config
+# Show the fingerprint and defaults. The key itself is not printed.
 bunny config show
 
-# Set defaults
+# Check that bunny.net accepts the key
+bunny config test
+
+# Set defaults used by later commands
 bunny config set output_format json
+bunny config set default_pull_zone 12345
+bunny config unset api_key
 ```
 
-You can also use environment variables:
+`output_format` applies to later commands. `--json` on a command forces JSON for that invocation. `BUNNY_OUTPUT_FORMAT=table` (or `json`) overrides the file.
+
+Environment variables override the file but do not get copied into it:
+
 ```bash
 export BUNNY_API_KEY=your-api-key
 ```
@@ -73,7 +80,7 @@ bunny pullzone list
 # Create a new pull zone
 bunny pullzone create my-cdn https://origin.example.com
 
-# Get pull zone details
+# Get pull zone details. The id can be omitted when default_pull_zone is set.
 bunny pullzone get 12345
 
 # Add a custom hostname
@@ -85,6 +92,7 @@ bunny pullzone ssl 12345 cdn.example.com
 # Purge cache
 bunny pullzone purge 12345
 bunny pullzone purge 12345 --url https://cdn.example.com/file.js
+bunny pullzone purge 12345 --tag product-123
 
 # Delete a pull zone
 bunny pullzone delete 12345
@@ -113,7 +121,17 @@ bunny dns record update 12345 67890 --value 192.168.1.2
 
 # Delete a record
 bunny dns record delete 12345 67890
+
+# Export and import records as JSON. Import does not delete existing rows.
+bunny dns export 12345 -o example.com.json
+bunny dns import 12345 example.com.json --play
+bunny dns import 12345 example.com.json --exec
+
+# DNS query statistics
+bunny dns stats 12345
 ```
+
+`@` is the zone apex and is sent to the API as an empty name. MX and SRV records require `--priority`. Unknown record types are rejected.
 
 ### Storage Zones
 
@@ -128,7 +146,7 @@ bunny storage regions
 bunny storage create my-storage --region NY
 bunny storage create my-storage --region DE --replicate NY --replicate SG
 
-# Get storage zone details
+# Get storage zone details. Passwords are masked unless --show-secrets or --json.
 bunny storage get 12345
 
 # Delete a storage zone
@@ -140,9 +158,11 @@ bunny storage delete 12345
 ```bash
 # Purge a specific URL
 bunny purge url https://cdn.example.com/styles.css
+bunny purge url https://cdn.example.com/dir/ --exact
 
-# Purge entire pull zone
+# Purge an entire pull zone, or one CDN tag
 bunny purge zone 12345
+bunny purge tag 12345 product-123
 
 # Purge all pull zones (careful!)
 bunny purge all
@@ -180,7 +200,7 @@ bunny --version
 
 ## Configuration File
 
-The CLI stores configuration in `~/.config/bunny/config.json`:
+The CLI stores configuration in `~/.config/bunny/config.json` with mode `0600`:
 
 ```json
 {
@@ -224,13 +244,13 @@ Options:
 - `--play` - Dry run, show what would be migrated
 - `--exec` - Actually execute the migration
 - `--skip-proxied` - Skip records that are proxied through Cloudflare
-- `--skip-ns` - Skip NS records (default: true)
+- `--skip-ns` / `--include-ns` - Skip NS records (default: skip)
 
 ## Development
 
 ```bash
 # Clone the repo
-git clone https://github.com/straticus1/bunny-cli.git
+git clone https://github.com/afterdarksys/bunny-cli.git
 cd bunny-cli
 
 # Install in development mode
@@ -243,6 +263,26 @@ pytest
 ruff check .
 mypy src/
 ```
+
+## Security
+
+The account API key is sent only to `https://api.bunny.net`, and a Cloudflare token only to `https://api.cloudflare.com`. Redirects are refused so the credential is not forwarded to another host. Response bodies are capped. Local origins and link-local addresses are rejected before a pull zone or purge URL is sent.
+
+`bunny config show` prints a SHA-256 fingerprint. Storage passwords are masked in table output. `--json` on storage commands is machine output and includes the password the API returned. Do not record a terminal session of `storage create` or `--show-secrets` if the scrollback is shared.
+
+A key passed as a process argument can still appear in shell history. Prefer `bunny config set-key` with no argument, or `BUNNY_API_KEY`, on shared machines.
+
+## Changelog
+
+### 0.2.0
+
+- Command-line `--api-key` is actually used, and it is not written into the config file when other settings change.
+- Config files are stored mode `0600`. Symlinks and corrupt JSON fail closed.
+- Unknown DNS types are rejected instead of being stored as `A`. `@` is the apex. MX and SRV require a priority.
+- DNS list, storage list, and Cloudflare record/zone list follow pagination.
+- Statistics charts that map timestamps to numbers are summed. Storage "date created" reads `DateCreated`.
+- `--skip-ns` can be turned off with `--include-ns`.
+- New commands: `config test`, `config unset`, `dns export`, `dns import`, `dns stats`, `purge tag`, and purge by CDN tag.
 
 ## Contributing
 

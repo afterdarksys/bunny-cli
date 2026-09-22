@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bunny-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "A complete CLI for bunny.net - CDN, DNS, Storage, and more"
 readme = "README.md"
 license = "MIT"
@@ -34,8 +34,6 @@ dependencies = [
     "httpx>=0.25",
     "rich>=13.0",
     "pydantic>=2.0",
-    "pydantic-settings>=2.0",
-    "tabulate>=0.9",
 ]
 
 [project.optional-dependencies]
@@ -51,10 +49,10 @@ dev = [
 bunny = "bunny_cli.main:cli"
 
 [project.urls]
-Homepage = "https://github.com/straticus1/bunny-cli"
-Documentation = "https://github.com/straticus1/bunny-cli#readme"
-Repository = "https://github.com/straticus1/bunny-cli"
-Issues = "https://github.com/straticus1/bunny-cli/issues"
+Homepage = "https://github.com/afterdarksys/bunny-cli"
+Documentation = "https://github.com/afterdarksys/bunny-cli#readme"
+Repository = "https://github.com/afterdarksys/bunny-cli"
+Issues = "https://github.com/afterdarksys/bunny-cli/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bunny_cli"]

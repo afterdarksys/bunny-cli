@@ -2,12 +2,20 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any
 
 import click
 
 from bunny_cli.client import BunnyClient, StatisticsAPI
-from bunny_cli.output import console, print_dict, print_json
+from bunny_cli.output import (
+    console,
+    format_bytes,
+    print_dict,
+    print_json,
+    sum_numeric_chart,
+    wants_json,
+)
+from bunny_cli.validate import require_date
 
 
 @click.group()
@@ -16,61 +24,77 @@ def stats() -> None:
     pass
 
 
+def _window(date_from: str | None, date_to: str | None) -> tuple[str, str]:
+    if date_from:
+        date_from = require_date(date_from, flag="--from")
+    else:
+        date_from = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    if date_to:
+        date_to = require_date(date_to, flag="--to")
+    else:
+        date_to = datetime.now().strftime("%Y-%m-%d")
+    if date_from > date_to:
+        raise click.ClickException("--from must be on or before --to")
+    return date_from, date_to
+
+
+def _number(value: Any) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0
+    return float(value)
+
+
 @stats.command("overview")
 @click.option("--from", "date_from", help="Start date (YYYY-MM-DD)")
 @click.option("--to", "date_to", help="End date (YYYY-MM-DD)")
 @click.option("--zone", "pull_zone", type=int, help="Filter by pull zone ID")
-@click.option("--hourly", is_flag=True, help="Show hourly breakdown")
+@click.option("--hourly", is_flag=True, help="Request an hourly breakdown")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 def overview(
-    date_from: Optional[str],
-    date_to: Optional[str],
-    pull_zone: Optional[int],
+    date_from: str | None,
+    date_to: str | None,
+    pull_zone: int | None,
     hourly: bool,
     as_json: bool,
 ) -> None:
     """View CDN statistics overview."""
-    # Default to last 30 days if not specified
-    if not date_from:
-        date_from = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-    if not date_to:
-        date_to = datetime.now().strftime("%Y-%m-%d")
-
+    date_from, date_to = _window(date_from, date_to)
     with BunnyClient() as client:
-        api = StatisticsAPI(client)
-        data = api.get(date_from, date_to, pull_zone, hourly=hourly)
+        data = StatisticsAPI(client).get(date_from, date_to, pull_zone, hourly=hourly)
+    if wants_json(as_json):
+        print_json(data)
+        return
 
-        if as_json:
-            print_json(data)
-        else:
-            # Format and display
-            total_bandwidth = data.get("TotalBandwidthUsed", 0)
-            total_requests = data.get("TotalRequestsServed", 0)
-            cache_hit_rate = data.get("CacheHitRate", 0)
+    total_bandwidth = _number(data.get("TotalBandwidthUsed"))
+    total_requests = _number(data.get("TotalRequestsServed"))
+    cache_hit_rate = _number(data.get("CacheHitRate"))
+    display: dict[str, Any] = {
+        "Period": f"{date_from} to {date_to}",
+        "Total Bandwidth": format_bytes(total_bandwidth),
+        "Cached Bandwidth": format_bytes(sum_numeric_chart(data.get("BandwidthCachedChart"))),
+        "Total Requests": f"{int(total_requests):,}",
+        "Cache Hit Rate": f"{cache_hit_rate:.1f}%",
+        "Origin Traffic": format_bytes(_number(data.get("TotalOriginTraffic"))),
+        "4xx Responses": f"{int(sum_numeric_chart(data.get('Error4xxChart'))):,}",
+        "5xx Responses": f"{int(sum_numeric_chart(data.get('Error5xxChart'))):,}",
+    }
+    if pull_zone is not None:
+        display["Pull Zone ID"] = pull_zone
+    print_dict(display, "CDN Statistics")
 
-            display = {
-                "Period": f"{date_from} to {date_to}",
-                "Total Bandwidth": _format_bytes(total_bandwidth),
-                "Total Requests": f"{total_requests:,}",
-                "Cache Hit Rate": f"{cache_hit_rate:.1f}%",
-                "Bandwidth Cached": _format_bytes(data.get("BandwidthCachedChart", {}).get("Total", 0)),
-                "Requests Served": f"{data.get('RequestsServedChart', {}).get('Total', 0):,}",
-            }
-
-            if pull_zone:
-                display["Pull Zone ID"] = pull_zone
-
-            print_dict(display, "CDN Statistics")
-
-            # Show geographic breakdown if available
-            geo = data.get("GeoTrafficDistribution", {})
-            if geo and not as_json:
-                console.print("\n[bold]Traffic by Region:[/bold]")
-                sorted_geo = sorted(geo.items(), key=lambda x: x[1], reverse=True)[:10]
-                for country, traffic in sorted_geo:
-                    pct = (traffic / total_bandwidth * 100) if total_bandwidth > 0 else 0
-                    bar = "█" * int(pct / 5) + "░" * (20 - int(pct / 5))
-                    console.print(f"  {country:3} {bar} {pct:.1f}%")
+    geo = data.get("GeoTrafficDistribution")
+    if isinstance(geo, dict) and geo:
+        console.print("\n[bold]Traffic by Region:[/bold]")
+        pairs: list[tuple[str, float]] = []
+        for country, traffic in geo.items():
+            if isinstance(traffic, (int, float)) and not isinstance(traffic, bool):
+                pairs.append((str(country), float(traffic)))
+        pairs.sort(key=lambda item: item[1], reverse=True)
+        for country, traffic in pairs[:10]:
+            pct = (traffic / total_bandwidth * 100) if total_bandwidth > 0 else 0
+            filled = max(0, min(20, int(pct / 5)))
+            bar = "█" * filled + "░" * (20 - filled)
+            console.print(f"  {country:3} {bar} {pct:.1f}%")
 
 
 @stats.command("bandwidth")
@@ -79,45 +103,33 @@ def overview(
 @click.option("--zone", "pull_zone", type=int, help="Filter by pull zone ID")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 def bandwidth(
-    date_from: Optional[str],
-    date_to: Optional[str],
-    pull_zone: Optional[int],
+    date_from: str | None,
+    date_to: str | None,
+    pull_zone: int | None,
     as_json: bool,
 ) -> None:
     """View bandwidth usage."""
-    if not date_from:
-        date_from = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-    if not date_to:
-        date_to = datetime.now().strftime("%Y-%m-%d")
-
+    date_from, date_to = _window(date_from, date_to)
     with BunnyClient() as client:
-        api = StatisticsAPI(client)
-        data = api.get(date_from, date_to, pull_zone)
+        data = StatisticsAPI(client).get(date_from, date_to, pull_zone)
+    chart = data.get("BandwidthUsedChart")
+    if wants_json(as_json):
+        print_json(chart if isinstance(chart, dict) else {})
+        return
 
-        if as_json:
-            print_json(data.get("BandwidthUsedChart", {}))
-        else:
-            chart = data.get("BandwidthUsedChart", {})
-            total = data.get("TotalBandwidthUsed", 0)
-
-            console.print(f"[bold]Bandwidth Usage ({date_from} to {date_to})[/bold]\n")
-            console.print(f"Total: {_format_bytes(total)}\n")
-
-            # Show daily breakdown
-            if chart:
-                sorted_days = sorted(chart.items())[-14:]  # Last 14 days
-                max_val = max(v for _, v in sorted_days) if sorted_days else 1
-
-                for day, val in sorted_days:
-                    bar_len = int((val / max_val) * 30) if max_val > 0 else 0
-                    bar = "█" * bar_len
-                    console.print(f"  {day[:10]} {bar} {_format_bytes(val)}")
-
-
-def _format_bytes(bytes_val: float) -> str:
-    """Format bytes to human-readable string."""
-    for unit in ["B", "KB", "MB", "GB", "TB", "PB"]:
-        if abs(bytes_val) < 1024.0:
-            return f"{bytes_val:.2f} {unit}"
-        bytes_val /= 1024.0
-    return f"{bytes_val:.2f} EB"
+    total = _number(data.get("TotalBandwidthUsed"))
+    console.print(f"[bold]Bandwidth Usage ({date_from} to {date_to})[/bold]\n")
+    console.print(f"Total: {format_bytes(total)}\n")
+    if not isinstance(chart, dict):
+        return
+    points = [
+        (str(day), float(val))
+        for day, val in chart.items()
+        if isinstance(val, (int, float)) and not isinstance(val, bool)
+    ]
+    points.sort()
+    shown = points[-14:]
+    max_val = max((val for _, val in shown), default=0)
+    for day, val in shown:
+        bar_len = int((val / max_val) * 30) if max_val > 0 else 0
+        console.print(f"  {day[:10]} {'█' * max(0, bar_len)} {format_bytes(val)}")

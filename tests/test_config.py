@@ -5,9 +5,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-from bunny_cli.config import BunnyConfig, get_config_path, load_config, save_config
+from bunny_cli.config import BunnyConfig, load_config, save_config
 
 
 def test_bunny_config_defaults():

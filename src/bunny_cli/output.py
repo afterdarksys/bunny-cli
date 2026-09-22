@@ -2,12 +2,60 @@
 from __future__ import annotations
 
 import json
-from typing import Any, List, Dict, Optional
+from typing import Any
 
 from rich.console import Console
 from rich.table import Table
 
+from bunny_cli.config import load_config
+
 console = Console()
+
+
+def wants_json(as_json: bool) -> bool:
+    """True when this command should print JSON.
+
+    An explicit ``--json`` flag wins. Otherwise ``BUNNY_OUTPUT_FORMAT`` and
+    the configured ``output_format`` are consulted.
+    """
+    if as_json:
+        return True
+    return load_config().output_format == "json"
+
+
+def format_bytes(byte_count: float) -> str:
+    """Format a byte count for a terminal column."""
+    value = float(byte_count)
+    for unit in ("B", "KB", "MB", "GB", "TB", "PB"):
+        if abs(value) < 1024.0:
+            return f"{value:.2f} {unit}"
+        value /= 1024.0
+    return f"{value:.2f} EB"
+
+
+def sum_numeric_chart(chart: Any) -> float:
+    """Sum a Bunny chart object.
+
+    Some responses use ``{"Total": n}`` and others map timestamps to numbers.
+    Non-numeric values are ignored.
+    """
+    if not isinstance(chart, dict):
+        return 0.0
+    total = chart.get("Total")
+    if isinstance(total, (int, float)) and not isinstance(total, bool):
+        return float(total)
+    summed = 0.0
+    for value in chart.values():
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            summed += float(value)
+    return summed
+
+
+def mask_secret(value: Any) -> str:
+    """Return a fixed mask. The secret is not echoed."""
+    if not value:
+        return "[dim]-[/dim]"
+    return "********"
 
 
 def print_json(data: Any) -> None:
@@ -16,9 +64,9 @@ def print_json(data: Any) -> None:
 
 
 def print_table(
-    data: List[Dict[str, Any]],
-    columns: List[str],
-    headers: Optional[List[str]] = None,
+    data: list[dict[str, Any]],
+    columns: list[str],
+    headers: list[str] | None = None,
 ) -> None:
     """Print data as a table."""
     if not data:
@@ -48,7 +96,7 @@ def print_table(
     console.print(table)
 
 
-def print_dict(data: Dict[str, Any], title: Optional[str] = None) -> None:
+def print_dict(data: dict[str, Any], title: str | None = None) -> None:
     """Print a dictionary as a formatted table."""
     if title:
         console.print(f"\n[bold]{title}[/bold]")
